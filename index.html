@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lottery DApp</title>
+
+    <!-- Tailwind (dev ok) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Ethers.js UMD (browser global: ethers) -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2761/2761108.png" />
+    <style>
+        body {
+            font-family: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+            background: #0D1117;
+            color: #fff
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, .06);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, .1);
+            border-radius: 16px
+        }
+
+        .btn {
+            transition: transform .2s ease, box-shadow .2s ease
+        }
+
+        .btn:hover {
+            transform: translateY(-1px)
+        }
+
+        .btn-green {
+            background: linear-gradient(135deg, #00FF7F, #00c268)
+        }
+
+        .btn-purple {
+            background: linear-gradient(135deg, #8A2BE2, #6A0DAD)
+        }
+
+        .btn-blue {
+            background: linear-gradient(135deg, #007BFF, #00D4FF)
+        }
+
+        .addr {
+            max-width: 260px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap
+        }
+
+        .toast {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            opacity: 0;
+            transform: translateY(-8px);
+            transition: all .25s
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0)
+        }
+    </style>
+</head>
+
+<body class="min-h-screen">
+
+    <header class="sticky top-0 z-10 bg-[#0D1117]/80  border-b border-white/10">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+            <!-- <h1
+                class="text-xl sm:text-2xl font-bold text-transparent  bg-clip-text bg-gradient-to-r  from-blue-400  to-purple-400">
+                🎰 Lottery DApp</h1> -->
+            <h1 class="text-2xl font-bold text-green-400">🎰 Lottery DApp</h1>
+
+            <div class="flex items-center gap-3">
+                <span id="netName" class="text-xs sm:text-sm text-white/60 hidden sm:inline"></span>
+                <button id="connectBtn" class="btn btn-blue px-4 py-2 rounded-full font-semibold">Connect
+                    Wallet</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
+        <!-- stats -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div class="glass p-5">
+                <p class="text-white/60">Connected Wallet</p>
+                <p id="userAddr" class="addr mt-1 font-semibold text-green-400">Not connected</p>
+            </div>
+            <div class="glass p-5">
+                <p class="text-white/60">Manager(@Tiwari)</p>
+                <p id="managerAddr" class="addr mt-1 font-semibold text-yellow-300">–</p>
+            </div>
+            <div class="glass p-5">
+                <p class="text-white/60">Total Players</p>
+                <p id="playerCount" class="mt-1 font-semibold text-purple-300">0</p>
+            </div>
+        </section>
+
+        <!-- actions -->
+        <section class="flex flex-col sm:flex-row gap-4">
+            <button id="enterBtn"
+                class="btn btn-green px-6 py-3 rounded-full font-bold disabled:opacity-60 disabled:cursor-not-allowed"
+                disabled>
+                Enter Lottery (0.02 ETH)
+            </button>
+            <button id="pickBtn" class="btn btn-purple px-6 py-3 rounded-full font-bold hidden">
+                Pick Winner
+            </button>
+        </section>
+
+        <!-- players -->
+        <section>
+            <h2 class="text-lg font-bold mb-3">Players</h2>
+            <div id="playersWrap" class="glass p-4 space-y-2 max-h-[380px] overflow-y-auto"></div>
+            <video width="600" autoplay loop muted
+                style="height:auto; width: 20%; border-radius: 8px; margin-top: 20px; margin-left: 35%;">
+                <source src="WhatsApp Video 2025-09-05 at 12.14.59_b1fef1d1.mp4" type="video/mp4">
+                Your browser does not support the video tag.
+
+            </video>
+        </section>
+    </main>
+
+    <!-- toast -->
+    <div id="toast" class="toast glass px-4 py-3 rounded-lg text-sm"></div>
+
+    <script>
+        (async function () {
+            // ====== CONFIG ======
+            const CONTRACT_ADDRESS = "0x160c9addfb510acc32e75242f1c7d579d7eabe46"; // from your screenshot
+            const ABI = [
+                {
+                    "inputs": [],
+                    "name": "enter",
+                    "outputs": [],
+                    "stateMutability": "payable",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "pickWinner",
+                    "outputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "constructor"
+                },
+                {
+                    "inputs": [],
+                    "name": "getPlayers",
+                    "outputs": [
+                        {
+                            "internalType": "address payable[]",
+                            "name": "",
+                            "type": "address[]"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "manager",
+                    "outputs": [
+                        {
+                            "internalType": "address",
+                            "name": "",
+                            "type": "address"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "name": "players",
+                    "outputs": [
+                        {
+                            "internalType": "address payable",
+                            "name": "",
+                            "type": "address"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                }
+            ]
+            // ====== UI refs ======
+            const $ = (id) => document.getElementById(id);
+            const connectBtn = $("connectBtn");
+            const enterBtn = $("enterBtn");
+            const pickBtn = $("pickBtn");
+            const userAddrEl = $("userAddr");
+            const mgrAddrEl = $("managerAddr");
+            const countEl = $("playerCount");
+            const playersWrap = $("playersWrap");
+            const netNameEl = $("netName");
+            const toastEl = $("toast");
+
+            // ====== state ======
+            let provider, signer, contract, userAddress, managerAddress;
+
+            function toast(msg) {
+                toastEl.textContent = msg;
+                toastEl.classList.add("show");
+                setTimeout(() => toastEl.classList.remove("show"), 2500);
+            }
+
+            function renderPlayers(list) {
+                playersWrap.innerHTML = "";
+                if (!list || !list.length) {
+                    playersWrap.innerHTML = `<div class="text-white/60">No players yet.</div>`;
+                    return;
+                }
+                list.forEach(a => {
+                    const row = document.createElement("div");
+                    row.className = "flex items-center justify-between bg-white/5 border border-white/10 rounded-lg px-3 py-2";
+                    row.innerHTML = `<span class="addr">${a}</span>`;
+                    playersWrap.appendChild(row);
+                });
+            }
+
+            async function refreshAll() {
+                if (!contract) return;
+                try {
+                    managerAddress = await contract.manager();
+                    mgrAddrEl.textContent = managerAddress;
+                    const players = await contract.getPlayers();
+                    countEl.textContent = players.length;
+                    renderPlayers(players);
+                    // manager controls
+                    if (userAddress && managerAddress && userAddress.toLowerCase() === managerAddress.toLowerCase()) {
+                        pickBtn.classList.remove("hidden");
+                    } else {
+                        pickBtn.classList.add("hidden");
+                    }
+                } catch (e) {
+                    console.error("refreshAll error", e);
+                }
+            }
+
+            // ====== connect wallet ======
+            connectBtn.addEventListener("click", async () => {
+                if (!window.ethereum) { toast("MetaMask not found"); return; }
+                try {
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    const net = await provider.getNetwork();
+                    netNameEl.textContent = `Chain: ${net.name} (${net.chainId})`;
+                    signer = provider.getSigner();
+                    userAddress = await signer.getAddress();
+                    userAddrEl.textContent = userAddress;
+
+                    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+                    enterBtn.disabled = false;
+                    connectBtn.textContent = "Connected ✅";
+                    connectBtn.disabled = true;
+                    toast("Wallet connected");
+
+                    await refreshAll();
+                } catch (e) {
+                    console.error("connect error", e);
+                    toast("Connection rejected");
+                }
+            });
+
+            // ====== enter (must be >= 1 ETH as per your contract) ======
+            enterBtn.addEventListener("click", async () => {
+                if (!contract) { toast("Connect wallet first"); return; }
+                try {
+                    toast("Submitting…");
+                    // send EXACTLY 1 ETH (your contract requires >=1 ether)
+                    const tx = await contract.enter({ value: ethers.utils.parseEther("0.02") });
+                    await tx.wait();
+                    toast("Entered successfully ✅");
+                    await refreshAll();
+                } catch (e) {
+                    console.error("enter error", e);
+                    // friendly messages based on your require() strings
+                    const msg = (e?.data?.message || e?.error?.message || e?.message || "").toLowerCase();
+                    if (msg.includes("manager cannot enter")) toast("Reverted: manager cannot enter");
+                    else if (msg.includes("players all ready enters")) toast("Reverted: already entered");
+                    else if (msg.includes("miniums ammmount must to payed")) toast("Reverted: need >= 1 ETH");
+                    else toast("Transaction failed ❌");
+                }
+            });
+
+            // ====== pick winner (manager only) ======
+            pickBtn.addEventListener("click", async () => {
+                if (!contract) { toast("Connect wallet first"); return; }
+                try {
+                    toast("Picking winner…");
+                    const tx = await contract.pickWinner();
+                    await tx.wait();
+                    toast("Winner picked ✅");
+                    await refreshAll();
+                } catch (e) {
+                    console.error("pickWinner error", e);
+                    const msg = (e?.data?.message || e?.error?.message || e?.message || "").toLowerCase();
+                    if (msg.includes("only manager")) toast("Reverted: only manager can pick winner");
+                    else toast("Transaction failed ❌");
+                }
+            });
+
+        })();
+    </script>
+</body>
+
+</html>
